@@ -129,7 +129,6 @@ def fetch_dealls(existing_links):
     print("\n🚀 [ENGINE 2] Membaca API Dealls (SejutaCita)...")
     match_count = 0
     
-    # Kunci rahasia dari hasil inspeksi (Request Headers)
     req_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Accept': '*/*',
@@ -140,7 +139,6 @@ def fetch_dealls(existing_links):
         'x-client-app-version': '2.49.46'
     }
     
-    # MENGGUNAKAN URL ASLI 100% (Termasuk parameter strict validation Dealls)
     api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=50&status=active&externalPlatformApplyUrlSet=null"
     
     try:
@@ -167,6 +165,8 @@ def fetch_dealls(existing_links):
                         time.sleep(1)
         else:
             print(f"⏩ Melewati Dealls hari ini (Status: {response.status_code})")
+            # INI ADALAH KAMERA PENGINTAI KITA:
+            print(f"🔍 DETAIL ERROR DEALLS: {response.text}") 
     except Exception as e:
         print(f"⚠️ Error API Dealls: {e}")
         
