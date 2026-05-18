@@ -220,6 +220,7 @@ def fetch_talentics(existing_links):
                     notion_title = f"[Talentics: {company}] - {title}"
                     
                     if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
+                        print(f"   [CEK] Judul: {title} | Skills: {desc[:50]}")
                         if link not in existing_links:
                             send_to_notion(notion_title, link)
                             existing_links.add(link)
