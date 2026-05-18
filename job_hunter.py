@@ -139,18 +139,35 @@ def fetch_dealls(existing_links):
         'x-client-app-version': '2.49.46'
     }
     
-    # Kita tambahkan perulangan agar bot mencari spesifik tiap profesi
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' di Dealls...")
-        # Perhatikan tambahan parameter `keyword={term}` di dalam URL
-        api_url = f"https://api.sejutacita.id/v1/explore-job/job?keyword={term}&page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
+        # PERBAIKAN 1: Mengubah spasi menjadi %20 agar server tidak bingung
+        encoded_term = term.replace(" ", "%20")
+        api_url = f"https://api.sejutacita.id/v1/explore-job/job?keyword={encoded_term}&page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
         
         try:
             response = requests.get(api_url, headers=req_headers)
             if response.status_code == 200:
                 res_json = response.json()
-                jobs = res_json if isinstance(res_json, list) else (res_json.get('data') or res_json.get('results') or [])
-                    
+                
+                # PERBAIKAN 2: Kamera X-Ray untuk melihat struktur asli JSON
+                jobs = []
+                if isinstance(res_json, list):
+                    jobs = res_json
+                elif isinstance(res_json, dict):
+                    # Mencari di berbagai kemungkinan laci penyimpanan
+                    if 'data' in res_json and isinstance(res_json['data'], list):
+                        jobs = res_json['data']
+                    elif 'data' in res_json and isinstance(res_json['data'], dict) and 'jobs' in res_json['data']:
+                        jobs = res_json['data']['jobs']
+                    elif 'results' in res_json:
+                        jobs = res_json['results']
+                
+                # Menampilkan laporan tangkapan mentah ke terminal
+                print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah dari server.")
+                if len(jobs) == 0 and isinstance(res_json, dict):
+                    print(f"   [X-RAY INFO] Struktur JSON dari Dealls: {list(res_json.keys())}")
+
                 for job in jobs:
                     if not isinstance(job, dict): continue
                     title = job.get('title') or job.get('name', 'Tanpa Judul')
