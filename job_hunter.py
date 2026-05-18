@@ -128,39 +128,27 @@ def fetch_kalibrr(existing_links):
 def fetch_dealls(existing_links):
     print("\n🚀 [ENGINE 2] Membaca API Dealls (SejutaCita)...")
     match_count = 0
-    req_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    # Tambahkan header Accept agar server Dealls tidak mengira kita bot spam
+    req_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json, text/plain, */*'
+    }
     
-    # Kita langsung tembak 50 lowongan aktif paling relevan di halaman pertama
     api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&limit=50&sortParam=mostRelevant&sortBy=asc&status=active"
     
     try:
         response = requests.get(api_url, headers=req_headers)
         if response.status_code == 200:
             res_json = response.json()
-            
-            # Defensive check untuk menangkap struktur array JSON-nya
-            jobs = []
-            if isinstance(res_json, list):
-                jobs = res_json
-            elif isinstance(res_json, dict):
-                jobs = res_json.get('data') or res_json.get('results') or []
+            jobs = res_json if isinstance(res_json, list) else (res_json.get('data') or res_json.get('results') or [])
                 
             for job in jobs:
-                if not isinstance(job, dict):
-                    continue
-                    
+                if not isinstance(job, dict): continue
                 title = job.get('title') or job.get('name', 'Tanpa Judul')
-                
-                # Parsing nama perusahaan
                 company_info = job.get('company') or job.get('companyBasicInfo')
-                company = "Unknown"
-                if isinstance(company_info, dict):
-                    company = company_info.get('name') or company_info.get('companyName') or "Unknown"
-                
+                company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
                 job_id = job.get('id') or job.get('_id', '')
                 link = f"https://dealls.com/jobs/{job_id}"
-                
-                # Gabungkan deskripsi dan kualifikasi untuk disaring
                 desc = (str(job.get('description', '')) + " " + str(job.get('requirement', ''))).lower()
                 notion_title = f"[Dealls: {company}] - {title}"
                 
@@ -171,7 +159,7 @@ def fetch_dealls(existing_links):
                         match_count += 1
                         time.sleep(1)
         else:
-            print(f"⚠️ API Dealls merespon dengan status: {response.status_code}")
+            print(f"⏩ Melewati Dealls hari ini (Status: {response.status_code} - API berubah atau menolak akses)")
     except Exception as e:
         print(f"⚠️ Error API Dealls: {e}")
         
@@ -221,7 +209,7 @@ def fetch_talentics(existing_links):
     return match_count
 
 # ==========================================
-# ENGINE 4: JOBSPY (LinkedIn, Indeed, Glassdoor)
+# ENGINE 4: JOBSPY (LinkedIn & Indeed)
 # ==========================================
 def fetch_jobspy(existing_links):
     print("\n🚀 [ENGINE 4] Memulai JobSpy (Platform Global)...")
@@ -229,8 +217,9 @@ def fetch_jobspy(existing_links):
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' via JobSpy...")
         try:
+            # GLASSDOOR DIHAPUS DARI LIST UNTUK MENGHINDARI ERROR 403
             jobs = scrape_jobs(
-                site_name=["linkedin", "indeed", "glassdoor"],
+                site_name=["linkedin", "indeed"], 
                 search_term=term,
                 location=LOCATION,
                 results_wanted=15, 
