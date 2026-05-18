@@ -139,37 +139,39 @@ def fetch_dealls(existing_links):
         'x-client-app-version': '2.49.46'
     }
     
-    # PERUBAHAN: limit diturunkan menjadi 20 agar diterima oleh server
-    api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
-    
-    try:
-        response = requests.get(api_url, headers=req_headers)
-        if response.status_code == 200:
-            res_json = response.json()
-            jobs = res_json if isinstance(res_json, list) else (res_json.get('data') or res_json.get('results') or [])
-                
-            for job in jobs:
-                if not isinstance(job, dict): continue
-                title = job.get('title') or job.get('name', 'Tanpa Judul')
-                company_info = job.get('company') or job.get('companyBasicInfo')
-                company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
-                job_id = job.get('id') or job.get('_id', '')
-                link = f"https://dealls.com/jobs/{job_id}"
-                desc = (str(job.get('description', '')) + " " + str(job.get('requirement', ''))).lower()
-                notion_title = f"[Dealls: {company}] - {title}"
-                
-                if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
-                    if link not in existing_links:
-                        send_to_notion(notion_title, link)
-                        existing_links.add(link)
-                        match_count += 1
-                        time.sleep(1)
-        else:
-            print(f"⏩ Melewati Dealls hari ini (Status: {response.status_code})")
-            print(f"🔍 DETAIL ERROR DEALLS: {response.text}") 
-    except Exception as e:
-        print(f"⚠️ Error API Dealls: {e}")
+    # Kita tambahkan perulangan agar bot mencari spesifik tiap profesi
+    for term in SEARCH_TERMS:
+        print(f"🔍 Mencari '{term}' di Dealls...")
+        # Perhatikan tambahan parameter `keyword={term}` di dalam URL
+        api_url = f"https://api.sejutacita.id/v1/explore-job/job?keyword={term}&page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
         
+        try:
+            response = requests.get(api_url, headers=req_headers)
+            if response.status_code == 200:
+                res_json = response.json()
+                jobs = res_json if isinstance(res_json, list) else (res_json.get('data') or res_json.get('results') or [])
+                    
+                for job in jobs:
+                    if not isinstance(job, dict): continue
+                    title = job.get('title') or job.get('name', 'Tanpa Judul')
+                    company_info = job.get('company') or job.get('companyBasicInfo')
+                    company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
+                    job_id = job.get('id') or job.get('_id', '')
+                    link = f"https://dealls.com/jobs/{job_id}"
+                    desc = (str(job.get('description', '')) + " " + str(job.get('requirement', ''))).lower()
+                    notion_title = f"[Dealls: {company}] - {title}"
+                    
+                    if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
+                        if link not in existing_links:
+                            send_to_notion(notion_title, link)
+                            existing_links.add(link)
+                            match_count += 1
+                            time.sleep(1)
+            else:
+                print(f"⚠️ API Dealls error untuk '{term}': {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ Error API Dealls untuk '{term}': {e}")
+            
     return match_count
 
 # ==========================================
