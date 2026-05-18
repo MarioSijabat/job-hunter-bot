@@ -202,15 +202,19 @@ def fetch_dealls(existing_links):
 def fetch_talentics(existing_links):
     print("\n🚀 [ENGINE 3] Membaca API Jobs Talentics...")
     match_count = 0
+    
+    # Memasukkan semua identitas VIP dari browser Anda
     req_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json'
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://jobs.talentics.id/jobs?search=python',
+        'x-requested-with': 'XMLHttpRequest',
+        'x-csrf-token': 'Odhevyozb6UPmct9CXewnFDEsAXbbIpOevjNHyAA',
+        'Cookie': '_gcl_au=1.1.1430381327.1779116016; _hjSessionUser_2874056=eyJpZCI6IjhhMzcyYjlmLWQyYTgtNTA1Ni05YmRmLWE1ZTZhMmRmNzU0OSIsImNyZWF0ZWQiOjE3NzkxMTYwMTY2NTYsImV4aXN0aW5nIjp0cnVlfQ==; _hjSession_2874056=eyJpZCI6IjRhNjM4ZDdmLTU5NDctNDIwMS1iNTFiLWM1NmZlNjg4ZGJlOCIsImMiOjE3NzkxMTYwMTY2NTcsInMiOjEsInIiOjEsInNiIjowLCJzciI6MCwic2UiOjAsImZzIjoxLCJzcCI6MX0=; g_state={"i_l":0,"i_ll":1779116019210,"i_b":"5NAC+v5ApKoIOAb96BtNorvk6ym0KAJLWRUcQR2JA64","i_e":{"enable_itp_optimization":23},"i_et":1779116016543}; XSRF-TOKEN=eyJpdiI6Ildzb21TY0lPcGN3eWhjaU5jTWxzd1E9PSIsInZhbHVlIjoiSXA0eFErT21wYWJMV09QTmI0SVlMTklycFVFN0ovMjFZT1U2aFdyWWFhNUFnNkV3UXFQNENBZXlrRGV6UnFEUmFHakcyRUVmeWwwc3BBYk4vYnY2MFVJNDRWenN1cFlUYmo4UG5odWMvZ1dsSnlvaWVTZVFJZnFjcHhvSmdEaFAiLCJtYWMiOiJhODUzMGIyNmQ0ZDViOGM4MjY0MTc0Zjk2ODBhZGI5M2JlOGJlOTEyNDQwMjk4ODM3OWNhMjg0MDNmNjM0NGZjIiwidGFnIjoiIn0%3D; talentics_session=eyJpdiI6IkVwVkdZaGJnWE1Bd0dJNTV1Z0VibHc9PSIsInZhbHVlIjoiTGxXdEZGL3pPMTZwVUZDczZOaVFsaXMwby9FVldhbFZJYnlVMmttUDFnMzI0bjF4MkRHcUM4UXFoS01GWmhhMWdZZi9QVTVuVk5qTEQybnZEM3RaNzc2Z0pzOEkzMWF6R2s1Z3lNcVRkTE5tQldiV0hXSGNwM3N3VDNUbnlWQ0wiLCJtYWMiOiIxZjMyNmRjOWNjNzFjMjA5MWU1NGRiYTBlYWExNTlkNzc3OWJiZTk5NGRkNzU0ZjNkZTYzMDFhZWU4MDM3Y2I4IiwidGFnIjoiIn0%3D; _ce.s=lcw~1779116019730'
     }
     
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' di Jobs Talentics...")
-        
-        # PERBAIKAN 1: Mengubah spasi menjadi %20 agar server tidak bingung
         encoded_term = term.replace(" ", "%20")
         api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={encoded_term}&page=1"
         
@@ -219,13 +223,9 @@ def fetch_talentics(existing_links):
             if response.status_code == 200:
                 res_json = response.json()
                 
-                # Mengambil data lowongan mentah
                 jobs = res_json.get('data', []) if isinstance(res_json, dict) else []
                 
-                # PERBAIKAN 2: Kamera X-Ray untuk memantau respons server
                 print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah dari Talentics.")
-                if len(jobs) == 0 and isinstance(res_json, dict):
-                    print(f"   [X-RAY INFO] Struktur JSON Talentics: {list(res_json.keys())}")
                 
                 for job in jobs:
                     if not isinstance(job, dict): continue
@@ -241,14 +241,14 @@ def fetch_talentics(existing_links):
                     link = job.get('url') or f"https://jobs.talentics.id/jobs/{slug}"
                     notion_title = f"[Talentics: {company}] - {title}"
                     
-                    # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
+                    # FILTER DILONGGARKAN (Langsung hajar masuk Notion)
                     if link not in existing_links:
                         send_to_notion(notion_title, link)
                         existing_links.add(link)
                         match_count += 1
                         time.sleep(1)
             else:
-                print(f"⚠️ API Talentics error: {response.status_code}")
+                print(f"⚠️ API Talentics menolak akses (Status: {response.status_code})")
         except Exception as e:
             print(f"⚠️ Error API Talentics untuk '{term}': {e}")
             
