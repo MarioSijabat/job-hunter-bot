@@ -128,10 +128,16 @@ def fetch_kalibrr(existing_links):
 def fetch_dealls(existing_links):
     print("\n🚀 [ENGINE 2] Membaca API Dealls (SejutaCita)...")
     match_count = 0
-    # Tambahkan header Accept agar server Dealls tidak mengira kita bot spam
+    
+    # Kunci rahasia dari hasil inspeksi (Request Headers)
     req_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json, text/plain, */*'
+        'Accept': '*/*',
+        'Content-Type': 'application/json',
+        'Origin': 'https://dealls.com',
+        'Referer': 'https://dealls.com/',
+        'x-client-app-name': 'Deall-Talent-Web',
+        'x-client-app-version': '2.49.46'
     }
     
     api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&limit=50&sortParam=mostRelevant&sortBy=asc&status=active"
@@ -159,7 +165,7 @@ def fetch_dealls(existing_links):
                         match_count += 1
                         time.sleep(1)
         else:
-            print(f"⏩ Melewati Dealls hari ini (Status: {response.status_code} - API berubah atau menolak akses)")
+            print(f"⏩ Melewati Dealls hari ini (Status: {response.status_code})")
     except Exception as e:
         print(f"⚠️ Error API Dealls: {e}")
         
