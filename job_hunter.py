@@ -140,7 +140,8 @@ def fetch_dealls(existing_links):
         'x-client-app-version': '2.49.46'
     }
     
-    api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&limit=50&sortParam=mostRelevant&sortBy=asc&status=active"
+    # MENGGUNAKAN URL ASLI 100% (Termasuk parameter strict validation Dealls)
+    api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=50&status=active&externalPlatformApplyUrlSet=null"
     
     try:
         response = requests.get(api_url, headers=req_headers)
