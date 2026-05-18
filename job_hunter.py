@@ -1,4 +1,5 @@
 import requests
+import re
 import time
 import os
 import pandas as pd
@@ -229,32 +230,53 @@ def fetch_dealls(existing_links):
     return match_count
 
 # ==========================================
-# ENGINE 3: JOBS TALENTICS (Versi Pagination Loop)
+# ENGINE 3: JOBS TALENTICS (Sistem Kunci Otomatis & Pagination)
 # ==========================================
 def fetch_talentics(existing_links):
-    print("\n🚀 [ENGINE 3] Membaca API Jobs Talentics...")
+    print("\n🚀 [ENGINE 3] Membaca API Jobs Talentics (Mode Otomatis)...")
     match_count = 0
     
-    req_headers = {
+    # 1. Buka sesi browser virtual yang bisa menyimpan memori (Cookie)
+    session = requests.Session()
+    session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json, text/plain, */*',
-        'Referer': 'https://jobs.talentics.id/jobs?search=python',
-        'x-requested-with': 'XMLHttpRequest',
-        'x-csrf-token': 'Odhevyozb6UPmct9CXewnFDEsAXbbIpOevjNHyAA',
-        'Cookie': '_gcl_au=1.1.1430381327.1779116016; _hjSessionUser_2874056=eyJpZCI6IjhhMzcyYjlmLWQyYTgtNTA1Ni05YmRmLWE1ZTZhMmRmNzU0OSIsImNyZWF0ZWQiOjE3NzkxMTYwMTY2NTYsImV4aXN0aW5nIjp0cnVlfQ==; _hjSession_2874056=eyJpZCI6IjRhNjM4ZDdmLTU5NDctNDIwMS1iNTFiLWM1NmZlNjg4ZGJlOCIsImMiOjE3NzkxMTYwMTY2NTcsInMiOjEsInIiOjEsInNiIjowLCJzciI6MCwic2UiOjAsImZzIjoxLCJzcCI6MX0=; g_state={"i_l":0,"i_ll":1779116019210,"i_b":"5NAC+v5ApKoIOAb96BtNorvk6ym0KAJLWRUcQR2JA64","i_e":{"enable_itp_optimization":23},"i_et":1779116016543}; XSRF-TOKEN=eyJpdiI6Ildzb21TY0lPcGN3eWhjaU5jTWxzd1E9PSIsInZhbHVlIjoiSXA0eFErT21wYWJMV09QTmI0SVlMTklycFVFN0ovMjFZT1U2aFdyWWFhNUFnNkV3UXFQNENBZXlrRGV6UnFEUmFHakcyRUVmeWwwc3BBYk4vYnY2MFVJNDRWenN1cFlUYmo4UG5odWMvZ1dsSnlvaWVTZVFJZnFjcHhvSmdEaFAiLCJtYWMiOiJhODUzMGIyNmQ0ZDViOGM4MjY0MTc0Zjk2ODBhZGI5M2JlOGJlOTEyNDQwMjk4ODM3OWNhMjg0MDNmNjM0NGZjIiwidGFnIjoiIn0%3D; talentics_session=eyJpdiI6IkVwVkdZaGJnWE1Bd0dJNTV1Z0VibHc9PSIsInZhbHVlIjoiTGxXdEZGL3pPMTZwVUZDczZOaVFsaXMwby9FVldhbFZJYnlVMmttUDFnMzI0bjF4MkRHcUM4UXFoS01GWmhhMWdZZi9QVTVuVk5qTEQybnZEM3RaNzc2Z0pzOEkzMWF6R2s1Z3lNcVRkTE5tQldiV0hXSGNwM3N3VDNUbnlWQ0wiLCJtYWMiOiIxZjMyNmRjOWNjNzFjMjA5MWU1NGRiYTBlYWExNTlkNzc3OWJiZTk5NGRkNzU0ZjNkZTYzMDFhZWU4MDM3Y2I4IiwidGFnIjoiIn0%3D; _ce.s=lcw~1779116019730'
-    }
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Referer': 'https://jobs.talentics.id/'
+    })
     
+    try:
+        # 2. Mampir ke halaman depan untuk memancing server memberikan Cookie & Token
+        print("   [SISTEM] Membuka gerbang dan mengambil kunci sesi terbaru...")
+        init_res = session.get("https://jobs.talentics.id/jobs", timeout=10)
+        
+        # 3. Ekstrak CSRF Token dari dalam kode HTML
+        csrf_token = ""
+        match = re.search(r'<meta name="csrf-token" content="(.*?)">', init_res.text)
+        if match:
+            csrf_token = match.group(1)
+        
+        # 4. Ubah mode penyamaran menjadi mode AJAX/API dengan kunci yang baru dicuri
+        session.headers.update({
+            'Accept': 'application/json, text/plain, */*',
+            'x-requested-with': 'XMLHttpRequest',
+            'x-csrf-token': csrf_token
+        })
+        print("   [SISTEM] Kunci berhasil diamankan! Memulai perburuan...")
+        
+    except Exception as e:
+        print(f"   ⚠️ Gagal mengambil kunci sesi awal: {e}")
+        return match_count # Hentikan engine jika kunci gagal didapat
+        
+    # 5. Mulai perburuan menggunakan 'session.get' (bukan requests.get biasa)
     for term in SEARCH_TERMS:
-        # Loop untuk memeriksa halaman 1 sampai 3
         for page in range(1, 4):
-            print(f"🔍 Mencari '{term}' di Jobs Talentics (Halaman {page})...")
+            print(f"🔍 Mencari '{term}' di Talentics (Halaman {page})...")
             encoded_term = term.replace(" ", "%20")
-            
-            # Parameter page dinamis
             api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={encoded_term}&page={page}"
             
             try:
-                response = requests.get(api_url, headers=req_headers)
+                # Menembak dengan sesi yang sudah membawa Cookie
+                response = session.get(api_url, timeout=10) 
                 if response.status_code == 200:
                     res_json = response.json()
                     jobs = res_json.get('data', []) if isinstance(res_json, dict) else []
@@ -274,7 +296,7 @@ def fetch_talentics(existing_links):
                         link = job.get('url') or f"https://jobs.talentics.id/jobs/{slug}"
                         notion_title = f"[Talentics: {company}] - {title}"
                         
-                        # Saringan Lunak: Ambil yang judulnya relevan dengan dunia IT/Management
+                        # Saringan Lunak
                         if any(skw in title.lower() for skw in SOFT_KEYWORDS):
                             if link not in existing_links:
                                 send_to_notion(notion_title, link)
@@ -287,10 +309,14 @@ def fetch_talentics(existing_links):
                         break
                 else:
                     print(f"⚠️ API Talentics menolak akses (Status: {response.status_code})")
+                    break # Hentikan pencarian halaman untuk kata kunci ini jika ditolak
             except Exception as e:
                 print(f"⚠️ Error API Talentics untuk '{term}' Halaman {page}: {e}")
                 break
-                
+            
+            # Anti-DDoS delay antar halaman
+            time.sleep(2) 
+            
     return match_count
 
 # ==========================================
