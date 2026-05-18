@@ -86,7 +86,7 @@ def send_to_notion(title, link):
         print(f"Error Koneksi: {e}")
 
 # ==========================================
-# ENGINE 1: KALIBRR (Hidden API / No Blok)
+# ENGINE 1: KALIBRR (Versi Pagination Loop)
 # ==========================================
 def fetch_kalibrr(existing_links):
     print("\n🚀 [ENGINE 1] Membaca API Kalibrr...")
@@ -97,49 +97,61 @@ def fetch_kalibrr(existing_links):
     }
     
     for term in SEARCH_TERMS:
-        print(f"🔍 Mencari '{term}' di Kalibrr...")
-        encoded_term = term.replace(" ", "%20")
-        
-        # PERBAIKAN: Menghapus &location=Indonesia agar tidak terjadi salah filter di backend
-        api_url = f"https://www.kalibrr.id/api/job_board/search?query={encoded_term}&limit=30"
-        
-        try:
-            response = requests.get(api_url, headers=req_headers)
-            if response.status_code == 200:
-                res_json = response.json()
-                jobs = res_json.get('jobs', [])
-                
-                print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah.")
-                    
-                for job in jobs:
-                    if not isinstance(job, dict): continue
-                    title = job.get('name', 'Tanpa Judul')
-                    
-                    company_info = job.get('company_info', {})
-                    company = "Perusahaan Tidak Diketahui"
-                    company_code = ""
-                    if isinstance(company_info, dict):
-                        company = company_info.get('name', 'Perusahaan Tidak Diketahui')
-                        company_code = company_info.get('code', '')
-                        
-                    job_id = job.get('id', '')
-                    link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
-                    notion_title = f"[Kalibrr: {company}] - {title}"
-                    
-                    if link not in existing_links:
-                        send_to_notion(notion_title, link)
-                        existing_links.add(link)
-                        match_count += 1
-                        time.sleep(1) 
-            else:
-                print(f"⚠️ API Kalibrr error: {response.status_code}")
-        except Exception as e:
-            print(f"⚠️ Error API Kalibrr untuk '{term}': {e}")
+        # Loop untuk memeriksa halaman 1 sampai 3
+        for page in range(1, 4):
+            print(f"🔍 Mencari '{term}' di Kalibrr (Halaman {page})...")
+            encoded_term = term.replace(" ", "%20")
             
+            # Menggunakan parameter page secara dinamis
+            api_url = f"https://www.kalibrr.id/api/job_board/search?query={encoded_term}&limit=30&page={page}"
+            
+            try:
+                response = requests.get(api_url, headers=req_headers)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    jobs = res_json.get('jobs', [])
+                    
+                    if not jobs:
+                        break # Halaman kosong, hentikan menyelam lebih dalam
+                        
+                    page_new_elements = 0
+                    for job in jobs:
+                        if not isinstance(job, dict): continue
+                        title = job.get('name', 'Tanpa Judul')
+                        
+                        company_info = job.get('company_info', {})
+                        company = "Perusahaan Tidak Diketahui"
+                        company_code = ""
+                        if isinstance(company_info, dict):
+                            company = company_info.get('name', 'Perusahaan Tidak Diketahui')
+                            company_code = company_info.get('code', '')
+                            
+                        job_id = job.get('id', '')
+                        link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
+                        notion_title = f"[Kalibrr: {company}] - {title}"
+                        
+                        # Saringan Lunak: Ambil yang judulnya relevan dengan dunia IT/Management
+                        if any(skw in title.lower() for skw in SOFT_KEYWORDS):
+                            if link not in existing_links:
+                                send_to_notion(notion_title, link)
+                                existing_links.add(link)
+                                match_count += 1
+                                page_new_elements += 1
+                                time.sleep(1) 
+                                
+                    # Jika satu halaman penuh sudah pernah ditarik sebelumnya, hentikan loop page
+                    if page_new_elements == 0 and len(jobs) > 0:
+                        break
+                else:
+                    print(f"⚠️ API Kalibrr error: {response.status_code}")
+            except Exception as e:
+                print(f"⚠️ Error API Kalibrr untuk '{term}' Halaman {page}: {e}")
+                break
+                
     return match_count
 
 # ==========================================
-# ENGINE 2: DEALLS (Hidden API / No Blok)
+# ENGINE 2: DEALLS (Versi Pagination Loop)
 # ==========================================
 def fetch_dealls(existing_links):
     print("\n🚀 [ENGINE 2] Membaca API Dealls (SejutaCita)...")
@@ -156,54 +168,73 @@ def fetch_dealls(existing_links):
     }
     
     for term in SEARCH_TERMS:
-        print(f"🔍 Mencari '{term}' di Dealls...")
-        encoded_term = term.replace(" ", "%20")
-        api_url = f"https://api.sejutacita.id/v1/explore-job/job?keyword={encoded_term}&page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
-        
-        try:
-            response = requests.get(api_url, headers=req_headers)
-            if response.status_code == 200:
-                res_json = response.json()
-                jobs = []
-                
-                data_node = res_json.get('data')
-                if isinstance(data_node, list): jobs = data_node
-                elif isinstance(data_node, dict):
-                    for key, value in data_node.items():
-                        if isinstance(value, list):
-                            jobs = value
-                            break
-                
-                for job in jobs:
-                    if not isinstance(job, dict): continue
-                    title = job.get('role', 'Tanpa Judul')
-                    company_info = job.get('company')
-                    company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
-                    job_id = job.get('id') or job.get('slug', '')
-                    link = f"https://dealls.com/jobs/{job_id}"
-                    notion_title = f"[Dealls: {company}] - {title}"
-                    
-                    # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
-                    if link not in existing_links:
-                        send_to_notion(notion_title, link)
-                        existing_links.add(link)
-                        match_count += 1
-                        time.sleep(1)
-            else:
-                print(f"⚠️ API Dealls error untuk '{term}': {response.status_code}")
-        except Exception as e:
-            print(f"⚠️ Error API Dealls untuk '{term}': {e}")
+        # Kita buat loop untuk memeriksa halaman 1 sampai 3
+        for page in range(1, 4): 
+            print(f"🔍 Mencari '{term}' di Dealls (Halaman {page})...")
+            encoded_term = term.replace(" ", "%20")
             
+            # Perhatikan parameter page sekarang dinamis: page={page}
+            api_url = f"https://api.sejutacita.id/v1/explore-job/job?keyword={encoded_term}&page={page}&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
+            
+            try:
+                response = requests.get(api_url, headers=req_headers)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    jobs = []
+                    
+                    data_node = res_json.get('data')
+                    if isinstance(data_node, list): jobs = data_node
+                    elif isinstance(data_node, dict):
+                        for key, value in data_node.items():
+                            if isinstance(value, list):
+                                jobs = value
+                                break
+                    
+                    # Jika halaman tersebut ternyata kosong, tidak perlu lanjut ke halaman berikutnya
+                    if not jobs:
+                        break
+                        
+                    page_new_elements = 0
+                    for job in jobs:
+                        if not isinstance(job, dict): continue
+                        title = job.get('role', 'Tanpa Judul')
+                        company_info = job.get('company')
+                        company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
+                        job_id = job.get('id') or job.get('slug', '')
+                        link = f"https://dealls.com/jobs/{job_id}"
+                        notion_title = f"[Dealls: {company}] - {title}"
+                        
+                        # Gabungkan dengan Soft Filter Judul dari diskusi sebelumnya
+                        if any(skw in title.lower() for skw in SOFT_KEYWORDS):
+                            if link not in existing_links:
+                                send_to_notion(notion_title, link)
+                                existing_links.add(link)
+                                match_count += 1
+                                page_new_elements += 1
+                                time.sleep(1)
+                                
+                    # OPTIMASI KUOTA: Jika di satu halaman penuh TIDAK ADA satu pun lowongan baru 
+                    # (semuanya sudah ada di Notion), artinya kita sudah mencapai batas data lama.
+                    # Berhentilah menyelam lebih dalam untuk menghemat waktu & kuota.
+                    if page_new_elements == 0 and len(jobs) > 0:
+                        print("   💡 Semua data di halaman ini sudah ada di Notion. Menghentikan pencarian lebih dalam.")
+                        break
+                        
+                else:
+                    print(f"⚠️ API Dealls error untuk '{term}' Halaman {page}: {response.status_code}")
+            except Exception as e:
+                print(f"⚠️ Error API Dealls untuk '{term}' Halaman {page}: {e}")
+                break # Keluar dari loop page jika terjadi error koneksi
+                
     return match_count
 
 # ==========================================
-# ENGINE 3: JOBS TALENTICS (Hidden API / GET)
+# ENGINE 3: JOBS TALENTICS (Versi Pagination Loop)
 # ==========================================
 def fetch_talentics(existing_links):
     print("\n🚀 [ENGINE 3] Membaca API Jobs Talentics...")
     match_count = 0
     
-    # Memasukkan semua identitas VIP dari browser Anda
     req_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Accept': 'application/json, text/plain, */*',
@@ -214,44 +245,52 @@ def fetch_talentics(existing_links):
     }
     
     for term in SEARCH_TERMS:
-        print(f"🔍 Mencari '{term}' di Jobs Talentics...")
-        encoded_term = term.replace(" ", "%20")
-        api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={encoded_term}&page=1"
-        
-        try:
-            response = requests.get(api_url, headers=req_headers)
-            if response.status_code == 200:
-                res_json = response.json()
-                
-                jobs = res_json.get('data', []) if isinstance(res_json, dict) else []
-                
-                print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah dari Talentics.")
-                
-                for job in jobs:
-                    if not isinstance(job, dict): continue
-                    title = job.get('title') or job.get('name', 'Tanpa Judul')
-                    
-                    company_info = job.get('company')
-                    if isinstance(company_info, dict):
-                        company = company_info.get('name', 'Unknown')
-                    else:
-                        company = job.get('company_name', 'Unknown')
-                        
-                    slug = job.get('slug') or job.get('id', '')
-                    link = job.get('url') or f"https://jobs.talentics.id/jobs/{slug}"
-                    notion_title = f"[Talentics: {company}] - {title}"
-                    
-                    # FILTER DILONGGARKAN (Langsung hajar masuk Notion)
-                    if link not in existing_links:
-                        send_to_notion(notion_title, link)
-                        existing_links.add(link)
-                        match_count += 1
-                        time.sleep(1)
-            else:
-                print(f"⚠️ API Talentics menolak akses (Status: {response.status_code})")
-        except Exception as e:
-            print(f"⚠️ Error API Talentics untuk '{term}': {e}")
+        # Loop untuk memeriksa halaman 1 sampai 3
+        for page in range(1, 4):
+            print(f"🔍 Mencari '{term}' di Jobs Talentics (Halaman {page})...")
+            encoded_term = term.replace(" ", "%20")
             
+            # Parameter page dinamis
+            api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={encoded_term}&page={page}"
+            
+            try:
+                response = requests.get(api_url, headers=req_headers)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    jobs = res_json.get('data', []) if isinstance(res_json, dict) else []
+                    
+                    if not jobs:
+                        break
+                        
+                    page_new_elements = 0
+                    for job in jobs:
+                        if not isinstance(job, dict): continue
+                        title = job.get('title') or job.get('name', 'Tanpa Judul')
+                        
+                        company_info = job.get('company')
+                        company = company_info.get('name', 'Unknown') if isinstance(company_info, dict) else job.get('company_name', 'Unknown')
+                            
+                        slug = job.get('slug') or job.get('id', '')
+                        link = job.get('url') or f"https://jobs.talentics.id/jobs/{slug}"
+                        notion_title = f"[Talentics: {company}] - {title}"
+                        
+                        # Saringan Lunak: Ambil yang judulnya relevan dengan dunia IT/Management
+                        if any(skw in title.lower() for skw in SOFT_KEYWORDS):
+                            if link not in existing_links:
+                                send_to_notion(notion_title, link)
+                                existing_links.add(link)
+                                match_count += 1
+                                page_new_elements += 1
+                                time.sleep(1)
+                                
+                    if page_new_elements == 0 and len(jobs) > 0:
+                        break
+                else:
+                    print(f"⚠️ API Talentics menolak akses (Status: {response.status_code})")
+            except Exception as e:
+                print(f"⚠️ Error API Talentics untuk '{term}' Halaman {page}: {e}")
+                break
+                
     return match_count
 
 # ==========================================
