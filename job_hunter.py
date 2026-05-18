@@ -139,7 +139,8 @@ def fetch_dealls(existing_links):
         'x-client-app-version': '2.49.46'
     }
     
-    api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=50&status=active&externalPlatformApplyUrlSet=null"
+    # PERUBAHAN: limit diturunkan menjadi 20 agar diterima oleh server
+    api_url = "https://api.sejutacita.id/v1/explore-job/job?page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
     
     try:
         response = requests.get(api_url, headers=req_headers)
@@ -165,7 +166,6 @@ def fetch_dealls(existing_links):
                         time.sleep(1)
         else:
             print(f"⏩ Melewati Dealls hari ini (Status: {response.status_code})")
-            # INI ADALAH KAMERA PENGINTAI KITA:
             print(f"🔍 DETAIL ERROR DEALLS: {response.text}") 
     except Exception as e:
         print(f"⚠️ Error API Dealls: {e}")
