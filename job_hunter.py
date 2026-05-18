@@ -89,18 +89,34 @@ def send_to_notion(title, link):
 # ENGINE 1: KALIBRR (Hidden API / No Blok)
 # ==========================================
 def fetch_kalibrr(existing_links):
-    print("🚀 [ENGINE 1] Membaca API Kalibrr...")
+    print("\n🚀 [ENGINE 1] Membaca API Kalibrr...")
     match_count = 0
-    req_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    req_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json'
+    }
     
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' di Kalibrr...")
-        api_url = f"https://www.kalibrr.id/api/job_board/search?query={term}&location=Indonesia&limit=30"
+        
+        # TERSANGKA 1: Mencegah error akibat spasi
+        encoded_term = term.replace(" ", "%20")
+        
+        # Saya mengubah sedikit endpoint URL-nya ke format pencarian text standar Kalibrr
+        api_url = f"https://www.kalibrr.id/api/job_board/search?text={encoded_term}&location=Indonesia&limit=30"
         
         try:
             response = requests.get(api_url, headers=req_headers)
             if response.status_code == 200:
-                jobs = response.json().get('jobs', [])
+                res_json = response.json()
+                
+                # TERSANGKA 2: Melihat struktur asli JSON
+                jobs = res_json.get('jobs', [])
+                
+                print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah.")
+                if len(jobs) == 0:
+                    print(f"   [X-RAY INFO] Struktur JSON Kalibrr: {list(res_json.keys())}")
+                    
                 for job in jobs:
                     title = job.get('name', 'Tanpa Judul')
                     company = job.get('company_info', {}).get('name', 'Perusahaan Tidak Diketahui')
@@ -110,17 +126,19 @@ def fetch_kalibrr(existing_links):
                     link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
                     notion_title = f"[Kalibrr: {company}] - {title}"
                     
-                    # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
+                    # FILTER DILONGGARKAN (Langsung Hajar)
                     if link not in existing_links:
                         send_to_notion(notion_title, link)
                         existing_links.add(link)
                         match_count += 1
                         time.sleep(1) 
+            else:
+                print(f"⚠️ API Kalibrr error: {response.status_code}")
+                print(f"   [DETAIL]: {response.text[:100]}")
         except Exception as e:
             print(f"⚠️ Error API Kalibrr untuk '{term}': {e}")
             
     return match_count
-
 
 # ==========================================
 # ENGINE 2: DEALLS (Hidden API / No Blok)
