@@ -98,35 +98,35 @@ def fetch_kalibrr(existing_links):
     
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' di Kalibrr...")
-        
-        # TERSANGKA 1: Mencegah error akibat spasi
         encoded_term = term.replace(" ", "%20")
         
-        # Saya mengubah sedikit endpoint URL-nya ke format pencarian text standar Kalibrr
-        api_url = f"https://www.kalibrr.id/api/job_board/search?text={encoded_term}&location=Indonesia&limit=30"
+        # KOREKSI: Menggunakan 'query=' kembali agar server mengenali kata kunci pencarian
+        api_url = f"https://www.kalibrr.id/api/job_board/search?query={encoded_term}&location=Indonesia&limit=30"
         
         try:
             response = requests.get(api_url, headers=req_headers)
             if response.status_code == 200:
                 res_json = response.json()
-                
-                # TERSANGKA 2: Melihat struktur asli JSON
                 jobs = res_json.get('jobs', [])
                 
                 print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah.")
-                if len(jobs) == 0:
-                    print(f"   [X-RAY INFO] Struktur JSON Kalibrr: {list(res_json.keys())}")
                     
                 for job in jobs:
+                    if not isinstance(job, dict): continue
                     title = job.get('name', 'Tanpa Judul')
-                    company = job.get('company_info', {}).get('name', 'Perusahaan Tidak Diketahui')
-                    job_id = job.get('id', '')
-                    company_code = job.get('company_info', {}).get('code', '')
                     
+                    company_info = job.get('company_info', {})
+                    company = "Perusahaan Tidak Diketahui"
+                    company_code = ""
+                    if isinstance(company_info, dict):
+                        company = company_info.get('name', 'Perusahaan Tidak Diketahui')
+                        company_code = company_info.get('code', '')
+                        
+                    job_id = job.get('id', '')
                     link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
                     notion_title = f"[Kalibrr: {company}] - {title}"
                     
-                    # FILTER DILONGGARKAN (Langsung Hajar)
+                    # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
                     if link not in existing_links:
                         send_to_notion(notion_title, link)
                         existing_links.add(link)
@@ -134,7 +134,6 @@ def fetch_kalibrr(existing_links):
                         time.sleep(1) 
             else:
                 print(f"⚠️ API Kalibrr error: {response.status_code}")
-                print(f"   [DETAIL]: {response.text[:100]}")
         except Exception as e:
             print(f"⚠️ Error API Kalibrr untuk '{term}': {e}")
             
