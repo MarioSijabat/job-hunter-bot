@@ -202,18 +202,33 @@ def fetch_dealls(existing_links):
 def fetch_talentics(existing_links):
     print("\n🚀 [ENGINE 3] Membaca API Jobs Talentics...")
     match_count = 0
-    req_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    req_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json'
+    }
     
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' di Jobs Talentics...")
-        api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={term}&page=1"
+        
+        # PERBAIKAN 1: Mengubah spasi menjadi %20 agar server tidak bingung
+        encoded_term = term.replace(" ", "%20")
+        api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={encoded_term}&page=1"
         
         try:
             response = requests.get(api_url, headers=req_headers)
             if response.status_code == 200:
-                jobs = response.json().get('data', [])
+                res_json = response.json()
+                
+                # Mengambil data lowongan mentah
+                jobs = res_json.get('data', []) if isinstance(res_json, dict) else []
+                
+                # PERBAIKAN 2: Kamera X-Ray untuk memantau respons server
+                print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah dari Talentics.")
+                if len(jobs) == 0 and isinstance(res_json, dict):
+                    print(f"   [X-RAY INFO] Struktur JSON Talentics: {list(res_json.keys())}")
                 
                 for job in jobs:
+                    if not isinstance(job, dict): continue
                     title = job.get('title') or job.get('name', 'Tanpa Judul')
                     
                     company_info = job.get('company')
@@ -224,17 +239,16 @@ def fetch_talentics(existing_links):
                         
                     slug = job.get('slug') or job.get('id', '')
                     link = job.get('url') or f"https://jobs.talentics.id/jobs/{slug}"
-                    desc = job.get('description', '').lower()
-                    
                     notion_title = f"[Talentics: {company}] - {title}"
                     
-                    if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
-                        print(f"   [CEK] Judul: {title} | Skills: {desc[:50]}")
-                        if link not in existing_links:
-                            send_to_notion(notion_title, link)
-                            existing_links.add(link)
-                            match_count += 1
-                            time.sleep(1)
+                    # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
+                    if link not in existing_links:
+                        send_to_notion(notion_title, link)
+                        existing_links.add(link)
+                        match_count += 1
+                        time.sleep(1)
+            else:
+                print(f"⚠️ API Talentics error: {response.status_code}")
         except Exception as e:
             print(f"⚠️ Error API Talentics untuk '{term}': {e}")
             
