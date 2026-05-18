@@ -100,8 +100,8 @@ def fetch_kalibrr(existing_links):
         print(f"🔍 Mencari '{term}' di Kalibrr...")
         encoded_term = term.replace(" ", "%20")
         
-        # KOREKSI: Menggunakan 'query=' kembali agar server mengenali kata kunci pencarian
-        api_url = f"https://www.kalibrr.id/api/job_board/search?query={encoded_term}&location=Indonesia&limit=30"
+        # PERBAIKAN: Menghapus &location=Indonesia agar tidak terjadi salah filter di backend
+        api_url = f"https://www.kalibrr.id/api/job_board/search?query={encoded_term}&limit=30"
         
         try:
             response = requests.get(api_url, headers=req_headers)
@@ -126,7 +126,6 @@ def fetch_kalibrr(existing_links):
                     link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
                     notion_title = f"[Kalibrr: {company}] - {title}"
                     
-                    # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
                     if link not in existing_links:
                         send_to_notion(notion_title, link)
                         existing_links.add(link)
