@@ -150,20 +150,19 @@ def fetch_dealls(existing_links):
                 res_json = response.json()
                 jobs = []
                 
-                # RADAR ARRAY OTOMATIS: Mencari list di mana pun ia berada
                 data_node = res_json.get('data')
-                if isinstance(data_node, list):
-                    jobs = data_node
+                if isinstance(data_node, list): jobs = data_node
                 elif isinstance(data_node, dict):
                     for key, value in data_node.items():
                         if isinstance(value, list):
                             jobs = value
-                            break # Ketemu! Langsung ambil dan hentikan pencarian
+                            break
                 
                 print(f"   [X-RAY] Berhasil mengekstrak {len(jobs)} data mentah.")
-                if len(jobs) == 0:
-                    keys = list(data_node.keys()) if isinstance(data_node, dict) else "Bukan dict"
-                    print(f"   [X-RAY INFO] Isi dalam data_node: {keys}")
+                
+                # FITUR INSPEKSI: Cetak kunci variabel dari lowongan pertama
+                if len(jobs) > 0 and term == SEARCH_TERMS[0]:
+                    print(f"   [INSPEKSI KUNCI] Variabel di dalam Dealls: {list(jobs[0].keys())}")
 
                 for job in jobs:
                     if not isinstance(job, dict): continue
@@ -172,7 +171,13 @@ def fetch_dealls(existing_links):
                     company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
                     job_id = job.get('id') or job.get('_id', '')
                     link = f"https://dealls.com/jobs/{job_id}"
-                    desc = (str(job.get('description', '')) + " " + str(job.get('requirement', ''))).lower()
+                    
+                    # PENGAMANAN SEMENTARA: Coba ambil dari berbagai kemungkinan nama deskripsi
+                    desc = str(job.get('description', '')) + " " + \
+                           str(job.get('requirement', '')) + " " + \
+                           str(job.get('jobDescription', ''))
+                    desc = desc.lower()
+                    
                     notion_title = f"[Dealls: {company}] - {title}"
                     
                     if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
