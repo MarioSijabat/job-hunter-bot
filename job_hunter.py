@@ -108,43 +108,6 @@ def fetch_kalibrr(existing_links):
                     company_code = job.get('company_info', {}).get('code', '')
                     
                     link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
-                    desc = job.get('description', '').lower()
-                    notion_title = f"[Kalibrr: {company}] - {title}"
-                    
-                    if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
-                        if link not in existing_links:
-                            send_to_notion(notion_title, link)
-                            existing_links.add(link)
-                            match_count += 1
-                            time.sleep(1) 
-        except Exception as e:
-            print(f"⚠️ Error API Kalibrr untuk '{term}': {e}")
-            
-    return match_count
-
-# ==========================================
-# ENGINE 1: KALIBRR (Hidden API / No Blok)
-# ==========================================
-def fetch_kalibrr(existing_links):
-    print("🚀 [ENGINE 1] Membaca API Kalibrr...")
-    match_count = 0
-    req_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    
-    for term in SEARCH_TERMS:
-        print(f"🔍 Mencari '{term}' di Kalibrr...")
-        api_url = f"https://www.kalibrr.id/api/job_board/search?query={term}&location=Indonesia&limit=30"
-        
-        try:
-            response = requests.get(api_url, headers=req_headers)
-            if response.status_code == 200:
-                jobs = response.json().get('jobs', [])
-                for job in jobs:
-                    title = job.get('name', 'Tanpa Judul')
-                    company = job.get('company_info', {}).get('name', 'Perusahaan Tidak Diketahui')
-                    job_id = job.get('id', '')
-                    company_code = job.get('company_info', {}).get('code', '')
-                    
-                    link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
                     notion_title = f"[Kalibrr: {company}] - {title}"
                     
                     # FILTER DILONGGARKAN: Langsung masukkan jika belum ada di Notion
