@@ -24,6 +24,13 @@ SEARCH_TERMS = [
     "ui ux designer"
 ]
 
+# Saringan Lunak untuk portal lokal (hanya memfilter dari judul)
+SOFT_KEYWORDS = [
+    'developer', 'engineer', 'programmer', 'manager', 
+    'ui', 'ux', 'designer', 'ai', 'data', 'machine learning', 
+    'backend', 'frontend', 'fullstack', 'software', '.net', 'python'
+]
+
 # 2. LAPIS KEDUA (Strict Keywords): Saringan presisi tinggi.
 # Lowongan dari Lapis Pertama akan DIBUANG jika deskripsinya tidak mengandung minimal satu kata di bawah ini.
 # Daftar ini adalah cerminan langsung dari tumpukan teknologi (tech stack) dan keahlian aslimu.
