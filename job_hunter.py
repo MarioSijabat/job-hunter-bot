@@ -141,7 +141,6 @@ def fetch_dealls(existing_links):
     
     for term in SEARCH_TERMS:
         print(f"🔍 Mencari '{term}' di Dealls...")
-        # PERBAIKAN 1: Mengubah spasi menjadi %20 agar server tidak bingung
         encoded_term = term.replace(" ", "%20")
         api_url = f"https://api.sejutacita.id/v1/explore-job/job?keyword={encoded_term}&page=1&sortParam=mostRelevant&sortBy=asc&boostTheBoostedJob=true&published=true&limit=20&status=active&externalPlatformApplyUrlSet=null"
         
@@ -149,24 +148,22 @@ def fetch_dealls(existing_links):
             response = requests.get(api_url, headers=req_headers)
             if response.status_code == 200:
                 res_json = response.json()
-                
-                # PERBAIKAN 2: Kamera X-Ray untuk melihat struktur asli JSON
                 jobs = []
-                if isinstance(res_json, list):
-                    jobs = res_json
-                elif isinstance(res_json, dict):
-                    # Mencari di berbagai kemungkinan laci penyimpanan
-                    if 'data' in res_json and isinstance(res_json['data'], list):
-                        jobs = res_json['data']
-                    elif 'data' in res_json and isinstance(res_json['data'], dict) and 'jobs' in res_json['data']:
-                        jobs = res_json['data']['jobs']
-                    elif 'results' in res_json:
-                        jobs = res_json['results']
                 
-                # Menampilkan laporan tangkapan mentah ke terminal
-                print(f"   [X-RAY] Berhasil menarik {len(jobs)} data mentah dari server.")
-                if len(jobs) == 0 and isinstance(res_json, dict):
-                    print(f"   [X-RAY INFO] Struktur JSON dari Dealls: {list(res_json.keys())}")
+                # RADAR ARRAY OTOMATIS: Mencari list di mana pun ia berada
+                data_node = res_json.get('data')
+                if isinstance(data_node, list):
+                    jobs = data_node
+                elif isinstance(data_node, dict):
+                    for key, value in data_node.items():
+                        if isinstance(value, list):
+                            jobs = value
+                            break # Ketemu! Langsung ambil dan hentikan pencarian
+                
+                print(f"   [X-RAY] Berhasil mengekstrak {len(jobs)} data mentah.")
+                if len(jobs) == 0:
+                    keys = list(data_node.keys()) if isinstance(data_node, dict) else "Bukan dict"
+                    print(f"   [X-RAY INFO] Isi dalam data_node: {keys}")
 
                 for job in jobs:
                     if not isinstance(job, dict): continue
