@@ -158,28 +158,22 @@ def fetch_dealls(existing_links):
                             jobs = value
                             break
                 
-                print(f"   [X-RAY] Berhasil mengekstrak {len(jobs)} data mentah.")
-                
-                # FITUR INSPEKSI: Cetak kunci variabel dari lowongan pertama
-                if len(jobs) > 0 and term == SEARCH_TERMS[0]:
-                    print(f"   [INSPEKSI KUNCI] Variabel di dalam Dealls: {list(jobs[0].keys())}")
-
                 for job in jobs:
                     if not isinstance(job, dict): continue
-                    title = job.get('title') or job.get('name', 'Tanpa Judul')
-                    company_info = job.get('company') or job.get('companyBasicInfo')
+                    
+                    # PERBAIKAN: Dealls menggunakan 'role' untuk judul pekerjaan
+                    title = job.get('role', 'Tanpa Judul')
+                    
+                    company_info = job.get('company')
                     company = company_info.get('name') if isinstance(company_info, dict) else "Unknown"
-                    job_id = job.get('id') or job.get('_id', '')
+                    job_id = job.get('id') or job.get('slug', '')
                     link = f"https://dealls.com/jobs/{job_id}"
                     
-                    # PENGAMANAN SEMENTARA: Coba ambil dari berbagai kemungkinan nama deskripsi
-                    desc = str(job.get('description', '')) + " " + \
-                           str(job.get('requirement', '')) + " " + \
-                           str(job.get('jobDescription', ''))
-                    desc = desc.lower()
-                    
+                    # PERBAIKAN: Dealls tidak mengirimkan deskripsi, tapi mengirimkan 'skills'
+                    desc = str(job.get('skills', '')).lower()
                     notion_title = f"[Dealls: {company}] - {title}"
                     
+                    # Filter menggunakan judul dan skills
                     if any(kw in title.lower() or kw in desc for kw in KEYWORDS):
                         if link not in existing_links:
                             send_to_notion(notion_title, link)
