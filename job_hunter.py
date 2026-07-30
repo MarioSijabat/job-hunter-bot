@@ -121,7 +121,7 @@ LOCATION = "Indonesia"
 # Berapa lowongan BARU (belum ada di Notion) yang ingin diburu per keyword,
 # per sekali jalan. Selama belum tercapai, bot akan terus membuka halaman
 # berikutnya walau menemukan banyak data lama di halaman-halaman awal.
-TARGET_NEW_JOBS_PER_TERM = 30
+TARGET_NEW_JOBS_PER_TERM = 15
 
 # Batas pengaman jumlah halaman per keyword (Kalibrr/Dealls/Talentics).
 # Mencegah bot menembak API tanpa henti kalau ternyata sisa datanya
@@ -423,8 +423,9 @@ def fetch_dealls(existing_links: set) -> int:
                 title = job.get("role", "Tanpa Judul")
                 company_info = job.get("company")
                 company = company_info.get("name") if isinstance(company_info, dict) else "Unknown"
-                job_id = job.get("id") or job.get("slug", "")
-                link = f"https://dealls.com/jobs/{job_id}"
+
+                job_slug = job.get("slug") or job.get("id", "")
+                link = f"https://dealls.com/job/{job_slug}"
                 notion_title = f"[Dealls: {company}] - {title}"
 
                 if not any(bad_kw in title.lower() for bad_kw in EXCLUDE_KEYWORDS):

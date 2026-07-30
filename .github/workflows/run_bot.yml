@@ -4,7 +4,7 @@ on:
   schedule:
     # Berjalan setiap jam 8:00 Pagi WIB (UTC+7)
     # Cron format: Menit Jam Tanggal Bulan Hari
-    - cron: "0 1 * * *"
+    - cron: "0 1,5,11 * * *" # 1,5,11 UTC = 8,12,18 WIB
   workflow_dispatch: # Tombol agar bisa menjalankan script ini manual dari tombol di GitHub
 
 jobs:
