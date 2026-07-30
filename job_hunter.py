@@ -422,10 +422,16 @@ def fetch_dealls(existing_links: set) -> int:
 
                 title = job.get("role", "Tanpa Judul")
                 company_info = job.get("company")
-                company = company_info.get("name") if isinstance(company_info, dict) else "Unknown"
-
+                company = "Unknown"
+                company_slug = ""
+                if isinstance(company_info, dict):
+                    company = company_info.get("name", "Unknown")
+                    company_slug = company_info.get("slug", "")
                 job_slug = job.get("slug") or job.get("id", "")
-                link = f"https://dealls.com/job/{job_slug}"
+                if company_slug:
+                    link = f"https://dealls.com/loker/{job_slug}~{company_slug}"
+                else:
+                    link = f"https://dealls.com/loker/{job_slug}"
                 notion_title = f"[Dealls: {company}] - {title}"
 
                 if not any(bad_kw in title.lower() for bad_kw in EXCLUDE_KEYWORDS):
