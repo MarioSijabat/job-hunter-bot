@@ -3,8 +3,7 @@ Job Hunter Bot
 ==============
 Scraper multi-sumber (Kalibrr, Dealls, Talentics, JobSpy/LinkedIn/Indeed)
 yang menyimpan hasil ke database Notion. Didesain untuk dijalankan berkala
-(mis. 3x/hari) via GitHub Actions.
-
+(3x/hari) via GitHub Actions.
 """
 
 import os
@@ -70,63 +69,192 @@ def random_user_agent() -> str:
 # ==========================================
 # KONFIGURASI TARGET
 # ==========================================
-SEARCH_TERMS = [
-    "fullstack developer",
-    ".net developer",
-    "ai engineer",
-    "machine learning",
-    "project manager",
-    "ui ux designer",
-]
+# SEARCH_TERMS = query yang benar-benar dikirim ke API tiap portal
+# (Kalibrr/Dealls/Talentics) & ke JobSpy (LinkedIn/Indeed). Ini adalah
+# "kail" utama, jadi disusun per KELUARGA PERAN agar cakupan luas untuk
+# profil IT kamu, sementara SOFT_KEYWORDS/EXCLUDE_KEYWORDS menyaring
+# presisinya di lapis berikutnya.
+SEARCH_TERMS = {
+    # Format: "term": (target_lowongan_baru, batas_halaman_aman)
+    #
+    # Ada dua jenis term:
+    # 1. TERM UTAMA - istilah umum/density tinggi yang HRD IT paling sering
+    #    pakai. Diberi kuota buru penuh (target & halaman lebih besar).
+    # 2. TERM PELENGKAP/SINONIM - menutup celah ketika HRD menulis judul
+    #    yang tidak eksplisit (mis. "Web Designer" utk peran UI/UX, atau
+    #    "Web Developer" tanpa embel-embel fullstack/backend/frontend).
+    #    Diberi kuota kecil karena fungsinya menangkap "ekor panjang", bukan
+    #    jadi sumber volume utama - supaya tidak menghabiskan kuota request
+    #    API untuk istilah yang hasilnya sedikit relevan.
+    #
+    # CATATAN: kata generik tunggal seperti "manager"/"analyst"/"engineer"/
+    # "designer" SENGAJA tidak dipakai sendirian sebagai term, karena di
+    # portal Indonesia mayoritas hasilnya non-IT (Sales Manager, Financial
+    # Analyst, Mechanical Engineer, dst) - bot akan menghabiskan banyak
+    # halaman menyaring noise sebelum ketemu yang relevan, bukan menambah
+    # hasil. Presisi tetap dijaga di level frasa (2 kata), sementara
+    # cakupan sinonim diperluas lewat entri pelengkap di bawah.
+
+    # --- Software Engineering (umum) ---
+    "software engineer": (15, 15),
+    "programmer": (15, 15),
+    "software developer": (8, 8),
+
+    # --- Web: Backend / Frontend / Fullstack ---
+    "backend developer": (15, 15),
+    "frontend developer": (15, 15),
+    "fullstack developer": (15, 15),
+    "web developer": (8, 8),
+    ".net developer": (15, 15),
+
+    # --- Mobile ---
+    "mobile developer": (10, 10),
+    "android developer": (8, 8),
+    "ios developer": (8, 8),
+
+    # --- QA / Testing ---
+    "quality assurance": (15, 15),
+    "qa engineer": (10, 10),
+    "software tester": (8, 8),
+
+    # --- Analyst ---
+    "system analyst": (15, 15),
+    "business analyst": (15, 15),
+    "it business analyst": (8, 8),
+
+    # --- Manajemen Proyek/Produk ---
+    "project manager": (15, 15),
+    "product manager": (10, 10),
+    "scrum master": (8, 8),
+
+    # --- UI/UX ---
+    "ui ux designer": (15, 15),
+    "ui designer": (8, 8),                  # pelengkap: HRD sering tulis salah satu saja
+    "ux designer": (8, 8),                  # pelengkap
+    "web designer": (8, 8),                 # pelengkap: kadang dipakai utk peran UI/UX
+    "product designer": (8, 8),             # pelengkap: istilah umum di startup
+
+    # --- Data / AI ---
+    "data engineer": (10, 10),
+    "data scientist": (8, 8),               # pelengkap
+    "data analyst": (8, 8),                 # pelengkap: dekat dgn system/business analyst
+    "machine learning engineer": (10, 10),
+    "ai engineer": (10, 10),
+}
 
 # LAPIS PERTAMA (Soft Filter): dipakai untuk menyaring cepat berdasarkan JUDUL
-# lowongan saja (longgar).
+# lowongan saja (longgar). Dicocokkan berbasis word-boundary lewat
+# keyword_hit() di bawah - bukan substring polos - supaya keyword pendek
+# seperti "ai"/"ux"/"qa" tidak salah tangkap kata lain.
 SOFT_KEYWORDS = [
-    "developer", "engineer", "programmer", "software",
+    # Umum software
+    "developer", "engineer", "programmer", "software", "software engineer",
+    # Backend / Frontend / Fullstack
     "backend", "back-end", "frontend", "front-end",
     "fullstack", "full stack", "full-stack",
-    "mobile", "web", "data",
-    "ai", "artificial intelligence", "machine learning", "ml",
-    ".net", "dotnet", "react", "ios", "android",
-    "project manager", "product manager", "scrum", "manager",
-    "ui", "ux", "designer", "design",
+    # Mobile
+    "mobile", "android", "ios",
+    # Stack spesifik (biar nangkap judul yg sudah sebut teknologi)
+    ".net", "dotnet", "react", "vue", "angular", "node", "laravel", "php",
+    "java", "kotlin", "swift", "golang", "flutter",
+    # Data / AI
+    "data", "ai", "artificial intelligence", "machine learning", "ml",
+    "data engineer", "data scientist", "data analyst",
+    # QA / Testing
+    "quality assurance", "qa", "tester", "testing", "quality", "automation",
+    "sdet",
+    # Analyst
+    "analyst", "system analyst", "business analyst",
+    # Manajemen
+    "project manager", "product manager", "scrum", "manager", "scrum master",
+    # UI/UX
+    "ui", "ux", "designer", "design", "ui/ux", "ui ux",
+    # DevOps / Cloud (dekat dgn profil developer)
+    "devops", "cloud", "sre",
 ]
 
-# DAFTAR HITAM: Jika judul mengandung kata ini
+# DAFTAR HITAM: Jika judul mengandung kata ini, lowongan dibuang meskipun
+# lolos SOFT_KEYWORDS. Dicocokkan dengan word-boundary juga.
 EXCLUDE_KEYWORDS = [
-    "marketing", "sales", "hr", "human resource", "finance", "accounting", 
-    "content", "social media", "copywriter", "graphic", "business development",
-    "admin", "entry", "support", "customer", "secretary", "legal", "operation"
+    "marketing", "sales", "hr", "human resource", "finance", "accounting",
+    "content", "social media", "copywriter", "graphic designer",
+    "business development", "admin", "support", "customer", "secretary",
+    "legal", "operation",
+    # Catatan: "entry" SENGAJA tidak dimasukkan - "Entry Level Software
+    # Engineer" tetap relevan buat profil kamu. "graphic" diganti jadi
+    # "graphic designer" supaya tidak ikut membuang "UI/UX Designer" yang
+    # judulnya kadang menyebut "graphic" sebagai skill tambahan.
 ]
 
-# LAPIS KEDUA (Strict Keywords): saringan presisi tinggi berbasis deskripsi.
+# LAPIS KEDUA (Strict Keywords): saringan presisi tinggi berbasis deskripsi,
+# dipakai khusus di engine JobSpy (LinkedIn/Indeed) karena di sana kita
+# punya akses ke teks deskripsi lengkap, bukan cuma judul.
 KEYWORDS = [
     # Fullstack / Backend / Mobile
     "c#", ".net", "laravel", "php", "react", "node.js", "typescript",
-    "dart", "javascript", "flutter",
+    "dart", "javascript", "flutter", "kotlin", "swift", "golang", "java",
+    "vue", "angular", "html", "css", "rest api", "graphql", "backend", "frontend",
+    "fullstack", "full stack", "full-stack", "mobile", "android", "ios",
     # AI / Data / Hardware
     "python", "machine learning", "edge", "computer vision", "inference",
-    "smote", "arm", "bare-metal",
+    "smote", "arm", "bare-metal", "data engineer", "data scientist",
     # Architecture / DevOps / DB
     "postgresql", "supabase", "clean architecture", "ci/cd", "agile", "scrum",
+    "docker", "kubernetes", "aws", "azure", "gcp", "sql",
+    # QA / Testing
+    "selenium", "cypress", "postman", "automation testing", "manual testing",
+    "software testing", "test case", "sdet",
+    # Analyst
+    "system analysis", "business analysis", "uml", "erd", "user story",
+    "requirement gathering", "jira", "confluence",
     # UI/UX / Desain
-    "figma", "ui/ux", "tailwind",
+    "figma", "ui/ux", "tailwind", "bootstrap", "material ui", "adobe xd", "photoshop", "illustrator",
 ]
 
 LOCATION = "Indonesia"
 
 # ==========================================
+# PENCOCOKAN KEYWORD BERBASIS WORD-BOUNDARY
+# ==========================================
+_boundary_pattern_cache: dict = {}
+
+
+def _compile_boundary_pattern(keyword: str) -> re.Pattern:
+    """Membangun regex untuk satu keyword dengan word-boundary di sisi yang
+    diawali/diakhiri karakter alfanumerik. Untuk keyword yang diawali/diakhiri
+    karakter non-alfanumerik (mis. ".net", "c#", "ci/cd"), boundary di sisi
+    itu dilepas karena \\b tidak berfungsi baik pada karakter non-word.
+    """
+    kw = keyword.lower().strip()
+    escaped = re.escape(kw)
+    left = r"\b" if kw[0].isalnum() else ""
+    right = r"\b" if kw[-1].isalnum() else ""
+    return re.compile(left + escaped + right)
+
+
+def keyword_hit(text: str, keywords) -> bool:
+    """True jika salah satu keyword ditemukan sebagai KATA UTUH (bukan
+    sekadar substring) di dalam text. Mencegah "ai" salah tangkap "Retail",
+    "qa" salah tangkap "square", dst."""
+    text_lower = text.lower()
+    for kw in keywords:
+        pattern = _boundary_pattern_cache.get(kw)
+        if pattern is None:
+            pattern = _compile_boundary_pattern(kw)
+            _boundary_pattern_cache[kw] = pattern
+        if pattern.search(text_lower):
+            return True
+    return False
+
+
+# ==========================================
 # TARGET "BURU SAMPAI DAPAT N BARU"
 # ==========================================
-# Berapa lowongan BARU (belum ada di Notion) yang ingin diburu per keyword,
-# per sekali jalan. Selama belum tercapai, bot akan terus membuka halaman
-# berikutnya walau menemukan banyak data lama di halaman-halaman awal.
-TARGET_NEW_JOBS_PER_TERM = 15
-
-# Batas pengaman jumlah halaman per keyword (Kalibrr/Dealls/Talentics).
-# Mencegah bot menembak API tanpa henti kalau ternyata sisa datanya
-# memang semua sudah pernah tersimpan / sumber datanya terbatas.
-MAX_PAGES_PER_TERM = 15
+# Kuota per-term (target lowongan baru & batas halaman aman) sudah
+# didefinisikan langsung di dalam SEARCH_TERMS di atas -> lihat komentar
+# di sana. Ini membuat term "utama" (density tinggi, jelas IT) diburu
+# lebih dalam, sementara term "pelengkap/sinonim" (menutup celah variasi
+# judul) cukup diburu sedikit supaya tidak boros request API.
 
 # Khusus JobSpy: karena library-nya tidak mendukung cursor pagination
 # (hanya `results_wanted`), strateginya adalah menaikkan results_wanted
@@ -277,14 +405,14 @@ def fetch_kalibrr(existing_links: set) -> int:
     logger.info("[ENGINE 1] Membaca API Kalibrr...")
     match_count = 0
 
-    for term in SEARCH_TERMS:
+    for term, (target_new, max_pages) in SEARCH_TERMS.items():
         term_new_count = 0
         page = 1
 
-        while term_new_count < TARGET_NEW_JOBS_PER_TERM and page <= MAX_PAGES_PER_TERM:
+        while term_new_count < target_new and page <= max_pages:
             logger.info(
                 f"🔍 Kalibrr | '{term}' | Halaman {page} "
-                f"(baru terkumpul: {term_new_count}/{TARGET_NEW_JOBS_PER_TERM})"
+                f"(baru terkumpul: {term_new_count}/{target_new})"
             )
             encoded_term = term.replace(" ", "%20")
             api_url = (
@@ -328,27 +456,31 @@ def fetch_kalibrr(existing_links: set) -> int:
                 link = f"https://www.kalibrr.id/c/{company_code}/jobs/{job_id}"
                 notion_title = f"[Kalibrr: {company}] - {title}"
 
-                if not any(bad_kw in title.lower() for bad_kw in EXCLUDE_KEYWORDS):
-                    if any(skw in title.lower() for skw in SOFT_KEYWORDS):
-                        if link not in existing_links:
-                            send_to_notion(notion_title, link)
-                            existing_links.add(link)
-                            match_count += 1
-                            term_new_count += 1
-                            time.sleep(1)
+                if keyword_hit(title, EXCLUDE_KEYWORDS):
+                    continue
+                if not keyword_hit(title, SOFT_KEYWORDS):
+                    continue
+                if link in existing_links:
+                    continue
 
-                            if term_new_count >= TARGET_NEW_JOBS_PER_TERM:
-                                logger.info(
-                                    f"   🎯 Target {TARGET_NEW_JOBS_PER_TERM} lowongan baru "
-                                    f"utk '{term}' tercapai di Kalibrr."
-                                )
-                                break
+                send_to_notion(notion_title, link)
+                existing_links.add(link)
+                match_count += 1
+                term_new_count += 1
+                time.sleep(1)
+
+                if term_new_count >= target_new:
+                    logger.info(
+                        f"   🎯 Target {target_new} lowongan baru "
+                        f"utk '{term}' tercapai di Kalibrr."
+                    )
+                    break
 
             page += 1
 
-        if page > MAX_PAGES_PER_TERM:
+        if page > max_pages:
             logger.info(
-                f"   🛑 Batas aman {MAX_PAGES_PER_TERM} halaman utk '{term}' tercapai "
+                f"   🛑 Batas aman {max_pages} halaman utk '{term}' tercapai "
                 f"(baru didapat: {term_new_count})."
             )
 
@@ -370,14 +502,14 @@ def fetch_dealls(existing_links: set) -> int:
         "x-client-app-version": "2.49.46",
     }
 
-    for term in SEARCH_TERMS:
+    for term, (target_new, max_pages) in SEARCH_TERMS.items():
         term_new_count = 0
         page = 1
 
-        while term_new_count < TARGET_NEW_JOBS_PER_TERM and page <= MAX_PAGES_PER_TERM:
+        while term_new_count < target_new and page <= max_pages:
             logger.info(
                 f"🔍 Dealls | '{term}' | Halaman {page} "
-                f"(baru terkumpul: {term_new_count}/{TARGET_NEW_JOBS_PER_TERM})"
+                f"(baru terkumpul: {term_new_count}/{target_new})"
             )
             encoded_term = term.replace(" ", "%20")
             api_url = (
@@ -434,27 +566,31 @@ def fetch_dealls(existing_links: set) -> int:
                     link = f"https://dealls.com/loker/{job_slug}"
                 notion_title = f"[Dealls: {company}] - {title}"
 
-                if not any(bad_kw in title.lower() for bad_kw in EXCLUDE_KEYWORDS):
-                    if any(skw in title.lower() for skw in SOFT_KEYWORDS):
-                        if link not in existing_links:
-                            send_to_notion(notion_title, link)
-                            existing_links.add(link)
-                            match_count += 1
-                            term_new_count += 1
-                            time.sleep(1)
+                if keyword_hit(title, EXCLUDE_KEYWORDS):
+                    continue
+                if not keyword_hit(title, SOFT_KEYWORDS):
+                    continue
+                if link in existing_links:
+                    continue
 
-                            if term_new_count >= TARGET_NEW_JOBS_PER_TERM:
-                                logger.info(
-                                    f"   🎯 Target {TARGET_NEW_JOBS_PER_TERM} lowongan baru "
-                                    f"utk '{term}' tercapai di Dealls."
-                                )
-                                break
+                send_to_notion(notion_title, link)
+                existing_links.add(link)
+                match_count += 1
+                term_new_count += 1
+                time.sleep(1)
+
+                if term_new_count >= target_new:
+                    logger.info(
+                        f"   🎯 Target {target_new} lowongan baru "
+                        f"utk '{term}' tercapai di Dealls."
+                    )
+                    break
 
             page += 1
 
-        if page > MAX_PAGES_PER_TERM:
+        if page > max_pages:
             logger.info(
-                f"   🛑 Batas aman {MAX_PAGES_PER_TERM} halaman utk '{term}' tercapai "
+                f"   🛑 Batas aman {max_pages} halaman utk '{term}' tercapai "
                 f"(baru didapat: {term_new_count})."
             )
 
@@ -491,14 +627,14 @@ def fetch_talentics(existing_links: set) -> int:
         logger.error(f"   ⚠️ Gagal mengambil sesi awal Talentics, engine dilewati: {e}")
         return match_count
 
-    for term in SEARCH_TERMS:
+    for term, (target_new, max_pages) in SEARCH_TERMS.items():
         term_new_count = 0
         page = 1
 
-        while term_new_count < TARGET_NEW_JOBS_PER_TERM and page <= MAX_PAGES_PER_TERM:
+        while term_new_count < target_new and page <= max_pages:
             logger.info(
                 f"🔍 Talentics | '{term}' | Halaman {page} "
-                f"(baru terkumpul: {term_new_count}/{TARGET_NEW_JOBS_PER_TERM})"
+                f"(baru terkumpul: {term_new_count}/{target_new})"
             )
             encoded_term = term.replace(" ", "%20")
             api_url = f"https://jobs.talentics.id/ajaxs/jobs?search={encoded_term}&page={page}"
@@ -538,28 +674,32 @@ def fetch_talentics(existing_links: set) -> int:
                     link = job.get("url") or f"https://jobs.talentics.id/jobs/{job_slug}"
                 notion_title = f"[Talentics: {company}] - {title}"
 
-                if not any(bad_kw in title.lower() for bad_kw in EXCLUDE_KEYWORDS):
-                    if any(skw in title.lower() for skw in SOFT_KEYWORDS):
-                        if link not in existing_links:
-                            send_to_notion(notion_title, link)
-                            existing_links.add(link)
-                            match_count += 1
-                            term_new_count += 1
-                            time.sleep(1)
+                if keyword_hit(title, EXCLUDE_KEYWORDS):
+                    continue
+                if not keyword_hit(title, SOFT_KEYWORDS):
+                    continue
+                if link in existing_links:
+                    continue
 
-                            if term_new_count >= TARGET_NEW_JOBS_PER_TERM:
-                                logger.info(
-                                    f"   🎯 Target {TARGET_NEW_JOBS_PER_TERM} lowongan baru "
-                                    f"utk '{term}' tercapai di Talentics."
-                                )
-                                break
+                send_to_notion(notion_title, link)
+                existing_links.add(link)
+                match_count += 1
+                term_new_count += 1
+                time.sleep(1)
+
+                if term_new_count >= target_new:
+                    logger.info(
+                        f"   🎯 Target {target_new} lowongan baru "
+                        f"utk '{term}' tercapai di Talentics."
+                    )
+                    break
 
             page += 1
             time.sleep(2)  # anti-DDoS delay antar halaman
 
-        if page > MAX_PAGES_PER_TERM:
+        if page > max_pages:
             logger.info(
-                f"   🛑 Batas aman {MAX_PAGES_PER_TERM} halaman utk '{term}' tercapai "
+                f"   🛑 Batas aman {max_pages} halaman utk '{term}' tercapai "
                 f"(baru didapat: {term_new_count})."
             )
 
@@ -573,16 +713,16 @@ def fetch_jobspy(existing_links: set) -> int:
     logger.info("[ENGINE 4] Memulai JobSpy (platform global)...")
     match_count = 0
 
-    for term in SEARCH_TERMS:
+    for term, (target_new, max_pages) in SEARCH_TERMS.items():
         term_new_count = 0
         results_wanted = JOBSPY_RESULTS_STEP
         attempt = 1
 
-        while term_new_count < TARGET_NEW_JOBS_PER_TERM and attempt <= JOBSPY_MAX_ATTEMPTS:
+        while term_new_count < target_new and attempt <= JOBSPY_MAX_ATTEMPTS:
             logger.info(
                 f"🔍 JobSpy | '{term}' | percobaan {attempt}/{JOBSPY_MAX_ATTEMPTS} "
                 f"(results_wanted={results_wanted}, baru terkumpul: "
-                f"{term_new_count}/{TARGET_NEW_JOBS_PER_TERM})"
+                f"{term_new_count}/{target_new})"
             )
             try:
                 jobs = safe_scrape_jobs(
@@ -603,28 +743,32 @@ def fetch_jobspy(existing_links: set) -> int:
 
             new_this_round = 0
             for _, row in jobs.iterrows():
-                title_lower = str(row.get("title", "")).lower()
-                desc_lower = str(row.get("description", "")).lower()
+                title = str(row.get("title", "Tanpa Judul"))
+                description = str(row.get("description", ""))
                 link = str(row.get("job_url", ""))
                 company = str(row.get("company", "Unknown"))
-                original_title = str(row.get("title", "Tanpa Judul"))
-                notion_title = f"[{company}] - {original_title}"
+                notion_title = f"[{company}] - {title}"
 
-                if any(kw in title_lower or kw in desc_lower for kw in KEYWORDS):
-                    if link and link not in existing_links:
-                        send_to_notion(notion_title, link)
-                        existing_links.add(link)
-                        match_count += 1
-                        term_new_count += 1
-                        new_this_round += 1
-                        time.sleep(1.5)
+                if keyword_hit(title, EXCLUDE_KEYWORDS):
+                    continue
+                if not (keyword_hit(title, KEYWORDS) or keyword_hit(description, KEYWORDS)):
+                    continue
+                if not link or link in existing_links:
+                    continue
 
-                        if term_new_count >= TARGET_NEW_JOBS_PER_TERM:
-                            logger.info(
-                                f"   🎯 Target {TARGET_NEW_JOBS_PER_TERM} lowongan baru "
-                                f"utk '{term}' tercapai di JobSpy."
-                            )
-                            break
+                send_to_notion(notion_title, link)
+                existing_links.add(link)
+                match_count += 1
+                term_new_count += 1
+                new_this_round += 1
+                time.sleep(1.5)
+
+                if term_new_count >= target_new:
+                    logger.info(
+                        f"   🎯 Target {target_new} lowongan baru "
+                        f"utk '{term}' tercapai di JobSpy."
+                    )
+                    break
 
             if new_this_round == 0:
                 # Sudah minta lebih banyak data tapi tidak ada progres sama sekali ->
