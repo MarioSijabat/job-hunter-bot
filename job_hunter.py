@@ -528,14 +528,14 @@ def fetch_talentics(existing_links: set) -> int:
                     continue
 
                 title = job.get("title") or job.get("name", "Tanpa Judul")
-                company_info = job.get("company")
-                company = (
-                    company_info.get("name", "Unknown")
-                    if isinstance(company_info, dict)
-                    else job.get("company_name", "Unknown")
-                )
-                slug = job.get("slug") or job.get("id", "")
-                link = job.get("url") or f"https://jobs.talentics.id/jobs/{slug}"
+                org_info = job.get("organization") or {}
+                company = job.get("organization_name") or org_info.get("name", "Unknown")
+                org_slug = org_info.get("slug", "")
+                job_slug = job.get("slug") or job.get("id", "")
+                if org_slug and job_slug:
+                    link = f"https://jobs.talentics.id/{org_slug}/{job_slug}"
+                else:
+                    link = job.get("url") or f"https://jobs.talentics.id/jobs/{job_slug}"
                 notion_title = f"[Talentics: {company}] - {title}"
 
                 if not any(bad_kw in title.lower() for bad_kw in EXCLUDE_KEYWORDS):
