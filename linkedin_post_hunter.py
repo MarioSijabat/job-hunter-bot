@@ -40,8 +40,22 @@ logger = logging.getLogger("linkedin_post_hunter")
 # ==========================================
 # KONFIGURASI NOTION
 # ==========================================
+def clean_database_id(raw_id: Optional[str]) -> str:
+    """Membersihkan raw database ID jika pengguna memasukkan URL Notion lengkap,
+    UUID dengan tanda strip (-), atau query parameters."""
+    if not raw_id:
+        return ""
+    clean = raw_id.split("?")[0].strip()
+    if "/" in clean:
+        clean = clean.rstrip("/").split("/")[-1]
+    hex_only = clean.replace("-", "")
+    if len(hex_only) == 32 and re.fullmatch(r"[a-f0-9]{32}", hex_only, re.IGNORECASE):
+        return hex_only
+    return clean
+
+
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
-NOTION_LINKEDIN_DB_ID = os.environ.get("NOTION_LINKEDIN_DB_ID")
+NOTION_LINKEDIN_DB_ID = clean_database_id(os.environ.get("NOTION_LINKEDIN_DB_ID"))
 
 NOTION_HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",

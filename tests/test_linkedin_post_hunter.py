@@ -727,3 +727,24 @@ class TestMainExecution:
 
         mock_get_urls.assert_not_called()
         mock_run.assert_not_called()
+
+
+# ==========================================
+# TEST: CLEAN DATABASE ID
+# ==========================================
+class TestCleanDatabaseId:
+    def test_clean_raw_id(self):
+        raw = "206019eb96ea4e41ba8df0d00f684cf0"
+        assert lph.clean_database_id(raw) == "206019eb96ea4e41ba8df0d00f684cf0"
+
+    def test_clean_hyphenated_uuid(self):
+        raw = "206019eb-96ea-4e41-ba8d-f0d00f684cf0"
+        assert lph.clean_database_id(raw) == "206019eb96ea4e41ba8df0d00f684cf0"
+
+    def test_clean_full_notion_url(self):
+        url = "https://www.notion.so/myworkspace/206019eb96ea4e41ba8df0d00f684cf0?v=abcdef"
+        assert lph.clean_database_id(url) == "206019eb96ea4e41ba8df0d00f684cf0"
+
+    def test_clean_empty_and_none(self):
+        assert lph.clean_database_id(None) == ""
+        assert lph.clean_database_id("") == ""
