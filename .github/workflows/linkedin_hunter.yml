@@ -1,0 +1,43 @@
+# ============================================================
+# LinkedIn Post Hunter Bot - GitHub Actions Workflow
+# ============================================================
+# Menjalankan linkedin_post_hunter.py secara otomatis setiap
+# 12 jam sekali untuk mencari postingan LinkedIn tentang hiring.
+#
+# Schedule: 06:00 UTC (13:00 WIB) dan 18:00 UTC (01:00 WIB)
+# ============================================================
+
+name: LinkedIn Post Hunter
+
+on:
+  schedule:
+    # Setiap 12 jam: jam 6 pagi dan 6 sore UTC
+    - cron: "0 6,18 * * *"
+  workflow_dispatch:
+    # Tombol "Run workflow" manual di GitHub Actions UI
+
+jobs:
+  hunt-linkedin-posts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 🔍 Run LinkedIn Post Hunter
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_LINKEDIN_DB_ID: ${{ secrets.NOTION_LINKEDIN_DB_ID }}
+          GOOGLE_CSE_API_KEY: ${{ secrets.GOOGLE_CSE_API_KEY }}
+          GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+        run: python linkedin_post_hunter.py
