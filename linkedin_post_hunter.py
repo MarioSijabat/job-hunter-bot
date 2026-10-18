@@ -64,11 +64,15 @@ NOTION_HEADERS = {
 }
 
 # ==========================================
-# KONFIGURASI GOOGLE CUSTOM SEARCH ENGINE
+# KONFIGURASI SEARCH PROVIDER (SERPER & GOOGLE CSE)
 # ==========================================
+# SERPER_API_KEY adalah provider utama (Google Search API via Serper.dev).
+# GOOGLE_CSE_API_KEY & GOOGLE_CSE_ID adalah fallback legacy jika tersedia.
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY")
 GOOGLE_CSE_API_KEY = os.environ.get("GOOGLE_CSE_API_KEY")
 GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID")
 GOOGLE_CSE_BASE_URL = "https://www.googleapis.com/customsearch/v1"
+SERPER_SEARCH_URL = "https://google.serper.dev/search"
 
 # ==========================================
 # ANTI-BLOKIR: USER-AGENT ROTATION
@@ -377,27 +381,61 @@ def send_to_notion(
 
 
 # ==========================================
-# GOOGLE CSE: SEARCH LINKEDIN POSTS
+# SEARCH LINKEDIN POSTS (SERPER / GOOGLE CSE)
 # ==========================================
-def search_linkedin_posts(query: str) -> list:
-    """Mencari LinkedIn Posts via Google Custom Search Engine API.
+def search_linkedin_posts_serper(query: str) -> list:
+    """Mencari LinkedIn Posts via Serper.dev (Google Search API).
+    Mendukung filter waktu 24 jam terakhir (tbs: qdr:d) dan kuota 2.500 free queries."""
+    headers = {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "q": f"site:linkedin.com/posts {query}",
+        "tbs": "qdr:d",
+        "num": 10,
+        "gl": "id",
+        "hl": "id",
+    }
 
-    Args:
-        query: String pencarian (akan digabung dengan site:linkedin.com/posts).
+    logger.info(f"🔍 Serper (Google Search) | Query: {query}")
 
-    Returns:
-        List of dict, masing-masing berisi:
-        - title: judul hasil pencarian Google
-        - link: URL post LinkedIn
-        - snippet: cuplikan konten dari Google
-    """
-    # Google CSE `dateRestrict=d1` membatasi hasil ke 24 jam terakhir
+    try:
+        response = safe_post(SERPER_SEARCH_URL, headers=headers, json=payload, timeout=15)
+    except Exception as e:
+        logger.warning(f"⚠️ Serper search gagal setelah retry habis: {e}")
+        return []
+
+    if response.status_code != 200:
+        logger.warning(
+            f"⚠️ Serper search status {response.status_code}: "
+            f"{response.text[:300]}"
+        )
+        return []
+
+    try:
+        data = response.json()
+    except ValueError:
+        logger.warning("⚠️ Serper: response bukan JSON valid")
+        return []
+
+    items = data.get("organic", [])
+    if not items:
+        logger.info(f"   💡 Tidak ada hasil untuk query: {query}")
+        return []
+
+    logger.info(f"   📄 Ditemukan {len(items)} hasil dari Serper")
+    return items
+
+
+def search_linkedin_posts_cse(query: str) -> list:
+    """Mencari LinkedIn Posts via Google Custom Search Engine (fallback)."""
     params = {
         "key": GOOGLE_CSE_API_KEY,
         "cx": GOOGLE_CSE_ID,
         "q": f"site:linkedin.com/posts {query}",
         "dateRestrict": "d1",
-        "num": 10,  # Maksimum per request Google CSE
+        "num": 10,
     }
 
     logger.info(f"🔍 Google CSE | Query: {query}")
@@ -430,16 +468,18 @@ def search_linkedin_posts(query: str) -> list:
     return items
 
 
+def search_linkedin_posts(query: str) -> list:
+    """Entry point pencarian: prioritaskan Serper.dev, gunakan CSE jika Serper tidak di-set."""
+    if SERPER_API_KEY:
+        return search_linkedin_posts_serper(query)
+    return search_linkedin_posts_cse(query)
+
+
 # ==========================================
-# PARSER: EKSTRAKSI DATA DARI HASIL CSE
+# PARSER: EKSTRAKSI DATA DARI HASIL CSE / SERPER
 # ==========================================
 def parse_post_from_cse_item(item: dict) -> Optional[dict]:
-    """Mengekstrak data terstruktur dari satu item hasil Google CSE.
-
-    Google CSE mengembalikan format:
-    - title: "Nama Author di LinkedIn: isi awal post..."
-    - link: "https://www.linkedin.com/posts/username_activity-xxxxx"
-    - snippet: cuplikan isi post yang lebih panjang
+    """Mengekstrak data terstruktur dari satu item hasil Serper atau Google CSE.
 
     Returns:
         Dict berisi {title, link, author, content, posted_date} atau
@@ -454,7 +494,7 @@ def parse_post_from_cse_item(item: dict) -> Optional[dict]:
         return None
 
     # Ekstrak nama author dari title Google
-    # Format umum: "Nama Author di LinkedIn: isi post..."
+    # Format umum: "Nama Author di LinkedIn: isi awal post..."
     # atau: "Nama Author on LinkedIn: post content..."
     # atau: "Nama Author posted on LinkedIn"
     author = "Unknown"
@@ -472,15 +512,15 @@ def parse_post_from_cse_item(item: dict) -> Optional[dict]:
     # Bersihkan snippet dari artefak Google (tanggal, "...", dll.)
     content = snippet.strip()
 
-    # Coba ekstrak tanggal dari snippet (format umum Google: "3 days ago",
-    # "Oct 15, 2026", dll.) — biasanya di awal snippet
-    posted_date = ""
-    date_match = re.search(
-        r"(\d{1,2}\s+\w+\s+ago|\w{3}\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})",
-        snippet,
-    )
-    if date_match:
-        posted_date = date_match.group(1)
+    # Tanggal: gunakan item['date'] jika ada (disediakan Serper) atau regex dari snippet
+    posted_date = item.get("date", "")
+    if not posted_date:
+        date_match = re.search(
+            r"(\d{1,2}\s+\w+\s+ago|\w{3}\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})",
+            snippet,
+        )
+        if date_match:
+            posted_date = date_match.group(1)
 
     # Buat judul ringkas untuk Notion
     post_title = title[:200] if title else f"Post by {author}"
@@ -613,17 +653,16 @@ def run_engine(name: str, func, existing_urls: set) -> int:
 def validate_config() -> bool:
     """Memvalidasi bahwa semua environment variables yang dibutuhkan
     sudah tersedia. Mengembalikan False jika ada yang hilang."""
-    required_vars = {
-        "NOTION_TOKEN": NOTION_TOKEN,
-        "NOTION_LINKEDIN_DB_ID": NOTION_LINKEDIN_DB_ID,
-        "GOOGLE_CSE_API_KEY": GOOGLE_CSE_API_KEY,
-        "GOOGLE_CSE_ID": GOOGLE_CSE_ID,
-    }
-
-    missing = [name for name, val in required_vars.items() if not val]
-    if missing:
+    if not NOTION_TOKEN:
+        logger.error("❌ Environment variable NOTION_TOKEN belum di-set.")
+        return False
+    if not NOTION_LINKEDIN_DB_ID:
+        logger.error("❌ Environment variable NOTION_LINKEDIN_DB_ID belum di-set.")
+        return False
+    if not SERPER_API_KEY and not (GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID):
         logger.error(
-            f"❌ Environment variable berikut belum di-set: {', '.join(missing)}"
+            "❌ Belum ada Search API Key yang di-set. "
+            "Harap set SERPER_API_KEY di GitHub Secrets."
         )
         return False
     return True
@@ -641,8 +680,11 @@ def main_execution():
     # Baca URL yang sudah tersimpan (deduplication)
     existing_urls = get_existing_urls()
 
+    # Tentukan nama provider yang aktif
+    provider = "Serper (Google Search)" if SERPER_API_KEY else "Google CSE"
+
     # Jalankan engine dengan graceful degradation
-    total = run_engine("LinkedIn Posts (Google CSE)", fetch_linkedin_posts, existing_urls)
+    total = run_engine(f"LinkedIn Posts ({provider})", fetch_linkedin_posts, existing_urls)
 
     logger.info(
         f"🎉 EKSEKUSI SELESAI! Total {total} post BARU berhasil "

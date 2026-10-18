@@ -16,6 +16,7 @@ from unittest.mock import patch, MagicMock, call
 # supaya konstanta global ter-inisialisasi dengan benar.
 os.environ["NOTION_TOKEN"] = "test-notion-token"
 os.environ["NOTION_LINKEDIN_DB_ID"] = "test-db-id-12345"
+os.environ["SERPER_API_KEY"] = "test-serper-api-key"
 os.environ["GOOGLE_CSE_API_KEY"] = "test-google-api-key"
 os.environ["GOOGLE_CSE_ID"] = "test-cse-id"
 
@@ -450,77 +451,80 @@ class TestSendToNotion:
 
 
 # ==========================================
-# TEST: GOOGLE CSE SEARCH
+# TEST: SEARCH LINKEDIN POSTS (SERPER & CSE)
 # ==========================================
 class TestSearchLinkedinPosts:
-    """Menguji search_linkedin_posts()."""
+    """Menguji search_linkedin_posts() baik dengan Serper maupun fallback Google CSE."""
 
+    @patch("linkedin_post_hunter.safe_post")
+    def test_successful_serper_search(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "organic": [
+                {"title": "Post 1", "link": "https://linkedin.com/posts/1", "snippet": "..."},
+                {"title": "Post 2", "link": "https://linkedin.com/posts/2", "snippet": "..."},
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        items = lph.search_linkedin_posts('"hiring" "developer"')
+        assert len(items) == 2
+        mock_post.assert_called_once()
+        called_json = mock_post.call_args[1]["json"]
+        assert "site:linkedin.com/posts" in called_json["q"]
+        assert called_json["tbs"] == "qdr:d"
+
+    @patch("linkedin_post_hunter.safe_post")
+    def test_serper_empty_results(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"organic": []}
+        mock_post.return_value = mock_response
+
+        items = lph.search_linkedin_posts('"no results"')
+        assert len(items) == 0
+
+    @patch("linkedin_post_hunter.safe_post")
+    def test_serper_api_error_returns_empty(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.text = "Forbidden"
+        mock_post.return_value = mock_response
+
+        items = lph.search_linkedin_posts('"error"')
+        assert len(items) == 0
+
+    @patch("linkedin_post_hunter.safe_post")
+    def test_serper_connection_error_returns_empty(self, mock_post):
+        mock_post.side_effect = Exception("Network error")
+        items = lph.search_linkedin_posts('"network fail"')
+        assert len(items) == 0
+
+    @patch("linkedin_post_hunter.safe_post")
+    def test_serper_invalid_json_returns_empty(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Not JSON")
+        mock_post.return_value = mock_response
+        items = lph.search_linkedin_posts('"bad json"')
+        assert len(items) == 0
+
+    @patch.object(lph, "SERPER_API_KEY", None)
     @patch("linkedin_post_hunter.safe_get")
-    def test_successful_search(self, mock_get):
+    def test_cse_fallback_when_serper_not_set(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "items": [
-                {"title": "Post 1", "link": "https://linkedin.com/posts/1", "snippet": "..."},
-                {"title": "Post 2", "link": "https://linkedin.com/posts/2", "snippet": "..."},
+                {"title": "CSE Post 1", "link": "https://linkedin.com/posts/cse1", "snippet": "..."},
             ]
         }
         mock_get.return_value = mock_response
 
         items = lph.search_linkedin_posts('"hiring" "developer"')
-        assert len(items) == 2
-
-        # Verifikasi parameter query mengandung site: restriction
-        called_params = mock_get.call_args[1]["params"]
-        assert "site:linkedin.com/posts" in called_params["q"]
-        assert called_params["dateRestrict"] == "d1"
-
-    @patch("linkedin_post_hunter.safe_get")
-    def test_empty_results(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"items": []}
-        mock_get.return_value = mock_response
-
-        items = lph.search_linkedin_posts('"no results"')
-        assert len(items) == 0
-
-    @patch("linkedin_post_hunter.safe_get")
-    def test_no_items_key(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"searchInformation": {"totalResults": "0"}}
-        mock_get.return_value = mock_response
-
-        items = lph.search_linkedin_posts('"empty"')
-        assert len(items) == 0
-
-    @patch("linkedin_post_hunter.safe_get")
-    def test_api_error_returns_empty(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.text = "Forbidden"
-        mock_get.return_value = mock_response
-
-        items = lph.search_linkedin_posts('"error"')
-        assert len(items) == 0
-
-    @patch("linkedin_post_hunter.safe_get")
-    def test_connection_error_returns_empty(self, mock_get):
-        mock_get.side_effect = Exception("Network error")
-
-        items = lph.search_linkedin_posts('"network fail"')
-        assert len(items) == 0
-
-    @patch("linkedin_post_hunter.safe_get")
-    def test_invalid_json_returns_empty(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.side_effect = ValueError("Not JSON")
-        mock_get.return_value = mock_response
-
-        items = lph.search_linkedin_posts('"bad json"')
-        assert len(items) == 0
+        assert len(items) == 1
+        mock_get.assert_called_once()
 
 
 # ==========================================
@@ -632,13 +636,24 @@ class TestValidateConfig:
     def test_missing_notion_token(self):
         assert lph.validate_config() is False
 
-    @patch.object(lph, "GOOGLE_CSE_API_KEY", None)
-    def test_missing_google_key(self):
-        assert lph.validate_config() is False
-
     @patch.object(lph, "NOTION_LINKEDIN_DB_ID", None)
     def test_missing_db_id(self):
         assert lph.validate_config() is False
+
+    @patch.object(lph, "SERPER_API_KEY", None)
+    @patch.object(lph, "GOOGLE_CSE_API_KEY", None)
+    @patch.object(lph, "GOOGLE_CSE_ID", None)
+    def test_missing_all_search_keys(self):
+        assert lph.validate_config() is False
+
+    @patch.object(lph, "GOOGLE_CSE_API_KEY", None)
+    @patch.object(lph, "GOOGLE_CSE_ID", None)
+    def test_valid_with_only_serper(self):
+        assert lph.validate_config() is True
+
+    @patch.object(lph, "SERPER_API_KEY", None)
+    def test_valid_with_only_google_cse(self):
+        assert lph.validate_config() is True
 
 
 # ==========================================

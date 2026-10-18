@@ -38,6 +38,7 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_LINKEDIN_DB_ID: ${{ secrets.NOTION_LINKEDIN_DB_ID }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           GOOGLE_CSE_API_KEY: ${{ secrets.GOOGLE_CSE_API_KEY }}
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
         run: python linkedin_post_hunter.py
