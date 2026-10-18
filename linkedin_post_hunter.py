@@ -338,6 +338,7 @@ def send_to_notion(
 
     # Notion rich_text dibatasi 2000 karakter per blok
     content_truncated = content[:2000] if content else ""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     data = {
         "parent": {"database_id": NOTION_LINKEDIN_DB_ID},
@@ -356,7 +357,7 @@ def send_to_notion(
                 "rich_text": [{"text": {"content": posted_date[:100]}}]
             },
             "Date Added": {
-                "date": {"start": datetime.now().isoformat()}
+                "rich_text": [{"text": {"content": now_str}}]
             },
             "Search Query": {
                 "rich_text": [{"text": {"content": search_query[:255]}}]
@@ -369,12 +370,17 @@ def send_to_notion(
         if response.status_code == 200:
             logger.info(f"✅ BARU: {post_title}")
             return True
-        else:
-            logger.error(
-                f"❌ Gagal kirim ke Notion ({response.status_code}): "
-                f"{response.text[:200]}"
-            )
-            return False
+        elif response.status_code == 400 and "Date Added is expected to be date" in response.text:
+            data["properties"]["Date Added"] = {"date": {"start": datetime.now().isoformat()}}
+            retry_res = safe_post(url, headers=NOTION_HEADERS, json=data)
+            if retry_res.status_code == 200:
+                logger.info(f"✅ BARU: {post_title}")
+                return True
+        logger.error(
+            f"❌ Gagal kirim ke Notion ({response.status_code}): "
+            f"{response.text[:200]}"
+        )
+        return False
     except Exception as e:
         logger.error(f"❌ Error koneksi Notion setelah retry habis: {e}")
         return False
